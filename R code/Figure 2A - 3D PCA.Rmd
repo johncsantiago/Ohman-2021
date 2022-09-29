@@ -1,0 +1,67 @@
+---
+title: "Figure 2A - 3D PCA"
+author: "John Santiago"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(rgl)
+knitr::opts_chunk$set(echo = FALSE, fig.align="center")
+knitr::knit_hooks$set(webgl = hook_webgl)
+
+```
+
+```{r, include = FALSE}
+# load required libraries 
+library(edgeR)
+library(plot3D)
+library(plot3Drgl)
+
+countdata=read.csv("https://raw.githubusercontent.com/johncsantiago/Ohman-2021/master/Data/mgh_raw_countdata.csv",row.names=1)
+groups=read.csv("https://raw.githubusercontent.com/johncsantiago/Ohman-2021/master/Data/mgh_metadata.csv",row.names=1)
+
+##EdgeR comparisons
+countdata=countdata[,row.names(groups)]
+countdata=countdata[,row.names(groups)]
+x <- countdata
+group <- factor(groups$Group)
+y <- DGEList(counts=x,group=group)
+keep <- filterByExpr(y)
+y <- y[keep,,keep.lib.sizes=FALSE] 
+z <- calcNormFactors(y, method = "TMM") 
+cpmdata=cpm(z)
+
+groups <- factor(group[18:35])
+pca <- prcomp(t(cpmdata[,18:35]), scale.=TRUE) 
+
+eigs <- pca$sdev^2
+ve=signif(((eigs / sum(eigs))*100)[1:3],4)
+names(ve)=c("PC1","PC2","PC3")
+```
+
+```{r fig.height=10,fig.width=12}
+zcoords=pca$x[,1]
+xcoords=pca$x[,2]
+ycoords=pca$x[,3]
+pcacolors=c("darkgreen","red3")
+lines3D(x=xcoords[c(1,4,7)],y=ycoords[c(1,4,7)],z=zcoords[c(1,4,7)],type="l",colkey=F,col="darkgreen",xlim=c(min(xcoords),max(xcoords)),zlim=c(min(zcoords),max(zcoords)),ylim=c(min(ycoords),max(ycoords)),zlab="PC1 (28.31%)",xlab="PC2 (13.51%)",ylab="PC3 (10.04%)",lty=1,axes=T,ticktype="detailed",box=T,bty="b2", theta=40, phi=20,r=4,lwd=2)
+
+lines3D(x=xcoords[c(2,5,8)],y=ycoords[c(2,5,8)],z=zcoords[c(2,5,8)],type="l",colkey=F,col="darkgreen",add=T,lty=2,lwd=2)
+lines3D(x=xcoords[c(3,6,9)],y=ycoords[c(3,6,9)],z=zcoords[c(3,6,9)],type="l",colkey=F,col="darkgreen",add=T,lty=3,lwd=2)
+
+lines3D(x=xcoords[c(10,13,16)],y=ycoords[c(10,13,16)],z=zcoords[c(10,13,16)],type="l",colkey=F,col="firebrick",add=T,lty=1,lwd=2)
+lines3D(x=xcoords[c(11,14,17)],y=ycoords[c(11,14,17)],z=zcoords[c(11,14,17)],type="l",colkey=F,col="firebrick",add=T,lty=2,lwd=2)
+lines3D(x=xcoords[c(12,15,18)],y=ycoords[c(12,15,18)],z=zcoords[c(12,15,18)],type="l",colkey=F,col="firebrick",add=T,lty=3,lwd=2)
+
+points3D(x=xcoords[1:3],y=ycoords[1:3],z=zcoords[1:3],type="p",colkey=F,col="darkgreen",add=T,pch=21,bg="limegreen",cex=2)
+points3D(x=xcoords[4:6],y=ycoords[4:6],z=zcoords[4:6],type="p",colkey=F,col="darkgreen",add=T,pch=24,bg="limegreen",cex=2)
+points3D(x=xcoords[7:9],y=ycoords[7:9],z=zcoords[7:9],type="p",colkey=F,col="darkgreen",add=T,pch=22,bg="limegreen",cex=2)
+
+points3D(x=xcoords[10:12],y=ycoords[10:12],z=zcoords[10:12],type="p",colkey=F,col="firebrick4",add=T,pch=21,bg="red",cex=2)
+points3D(x=xcoords[13:15],y=ycoords[13:15],z=zcoords[13:15],type="p",colkey=F,col="firebrick4",add=T,pch=24,bg="red",cex=2)
+points3D(x=xcoords[16:18],y=ycoords[16:18],z=zcoords[16:18],type="p",colkey=F,col="firebrick4",add=T,pch=22,bg="red",cex=2)
+##legend("topleft", legend=c("Lean Viable","Lean Non-Viable"),col=pcacolors[c(1,2)],lty=1,bty="n",lwd=2)
+
+legend("right", legend=c("F1","F2","F3","N1","N2","N3",NA,NA,NA,NA),col=c("darkgreen","darkgreen","darkgreen", "darkred","darkred","darkred",NA,NA,NA,NA),lty=c(1,2,3,1,2,3,NA,NA,NA,NA),bty="n",lwd=2,cex=1.5)
+legend("right", legend=c(rep(NA,6),"0h","3H","6H"),pch=c(rep(NA,6),21,24,22),bty="n",pt.bg="black",cex=1.5)
+```
