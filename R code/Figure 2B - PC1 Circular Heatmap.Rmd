@@ -1,0 +1,616 @@
+---
+title: "Lean Total DEG"
+author: "John Santiago"
+date: "11/5/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(rgl)
+knitr::opts_chunk$set(echo = FALSE, fig.align="center")
+knitr::knit_hooks$set(webgl = hook_webgl)
+```
+
+
+```{r include=F}
+library(edgeR)
+library(gplots)
+library(biomaRt)
+library(org.Hs.eg.db)
+library(goseq)
+library(GO.db)
+library(clusterProfiler)
+library(circlize)
+library(ComplexHeatmap)
+```
+
+```{r}
+x1=as.list(org.Hs.egENSEMBL2EG)
+x2=as.list(org.Hs.egSYMBOL)
+x3=as.list(org.Hs.egSYMBOL2EG)
+x4=as.list(org.Hs.egENSEMBL)
+parent=as.list(GOBPPARENTS)
+child=as.list(GOBPCHILDREN)
+term=as.list(GOTERM)
+genesingo=as.list(org.Hs.egGO2ALLEGS)
+
+##bm = useMart("ensembl")
+##bm = useDataset("hsapiens_gene_ensembl", mart=bm)
+##EG2GO = getBM(mart=bm, attributes=c('ensembl_gene_id','go_id'))
+
+##geneID2GO = by(EG2GO$go_id,
+                ##EG2GO$ensembl_gene_id,
+                ##function(x) as.character(x))
+
+##GO2geneID = by(EG2GO$ensembl_gene_id,
+                ##EG2GO$go_id,
+                ##function(x) as.character(x))
+
+geneID2GO.URL <- "https://raw.githubusercontent.com/johncsantiago/Ohman-2021/master/Data/geneID2GO.RData"
+load(url(geneID2GO.URL))
+
+GO2geneID.URL <- "https://raw.githubusercontent.com/johncsantiago/Ohman-2021/master/Data/GO2geneID.RData"
+load(url(GO2geneID.URL))
+
+```
+
+```{r include =F}
+
+countdata=read.csv("https://raw.githubusercontent.com/johncsantiago/Ohman-2021/master/Data/mgh_raw_countdata.csv",row.names=1)
+groups=read.csv("https://raw.githubusercontent.com/johncsantiago/Ohman-2021/master/Data/mgh_metadata.csv",row.names=1)
+
+##EdgeR comparisons
+countdata=countdata[,row.names(groups)]
+x <- countdata
+group <- factor(groups$Group)
+y <- DGEList(counts=x,group=group)
+keep <- filterByExpr(y)
+y <- y[keep,,keep.lib.sizes=FALSE] 
+z <- calcNormFactors(y, method = "TMM") 
+cpmdata=cpm(z)
+design<-model.matrix(~0+groups$Group)
+colnames(design) <- levels(group)
+z = estimateGLMCommonDisp(z,design, verbose=T)
+z = estimateGLMTrendedDisp(z,design)
+z = estimateGLMTagwiseDisp(z,design)
+fit <- glmFit(z, design)
+
+##comparisons
+##3 hour NV vs 0 hour NV
+compare = makeContrasts((LN2-LN1), levels=design)
+lrt <- glmLRT(fit,contrast=as.vector(compare))		
+G_X_E<-topTags(lrt,adjust.method="BH",n = nrow(z$counts), sort.by="PValue")
+LN2=G_X_E$table
+
+##6 hour NV vs 0 hour NV
+compare = makeContrasts((LN3-LN1), levels=design)
+lrt <- glmLRT(fit,contrast=as.vector(compare))		
+G_X_E<-topTags(lrt,adjust.method="BH",n = nrow(z$counts), sort.by="PValue")
+LN3=G_X_E$table
+
+##3 hour V vs 0 hour V
+compare = makeContrasts((LV2-LV1), levels=design)
+lrt <- glmLRT(fit,contrast=as.vector(compare))		
+G_X_E<-topTags(lrt,adjust.method="BH",n = nrow(z$counts), sort.by="PValue")
+LV2=G_X_E$table
+
+##6 hour V vs 0 hour V
+compare = makeContrasts((LV3-LV1), levels=design)
+lrt <- glmLRT(fit,contrast=as.vector(compare))		
+G_X_E<-topTags(lrt,adjust.method="BH",n = nrow(z$counts), sort.by="PValue")
+LV3=G_X_E$table
+
+##0 hour V vs 0 hour NV
+compare = makeContrasts((LV1-LN1), levels=design)
+lrt <- glmLRT(fit,contrast=as.vector(compare))		
+G_X_E<-topTags(lrt,adjust.method="BH",n = nrow(z$counts), sort.by="PValue")
+L1=G_X_E$table
+
+##3 hour V vs 3 hour NV
+compare = makeContrasts((LV2-LN2), levels=design)
+lrt <- glmLRT(fit,contrast=as.vector(compare))		
+G_X_E<-topTags(lrt,adjust.method="BH",n = nrow(z$counts), sort.by="PValue")
+L2=G_X_E$table
+
+##6 hour V vs 6 hour NV
+compare = makeContrasts((LV3-LN3), levels=design)
+lrt <- glmLRT(fit,contrast=as.vector(compare))		
+G_X_E<-topTags(lrt,adjust.method="BH",n = nrow(z$counts), sort.by="PValue")
+L3=G_X_E$table
+
+sLV2=LV2[LV2$FDR<.05,]
+sLV3=LV3[LV3$FDR<.05,]
+sLN2=LN2[LN2$FDR<.05,]
+sLN3=LN3[LN3$FDR<.05,]
+sL1=L1[L1$FDR<.05,]
+sL2=L2[L2$FDR<.05,]
+sL3=L3[L3$FDR<.05,]
+
+cpmmean=cpmdata[,18:35]
+colnames(cpmmean)[1:6]=c("LV 0H","LV 3H","LV 6H","LN 0H","LN 3H","LN 6H")
+cpmmean[,1]=(cpmmean[,1]+cpmmean[,2]+cpmmean[,3])/3
+cpmmean[,2]=(cpmmean[,4]+cpmmean[,5]+cpmmean[,6])/3
+cpmmean[,3]=(cpmmean[,7]+cpmmean[,8]+cpmmean[,9])/3
+cpmmean[,4]=(cpmmean[,10]+cpmmean[,11]+cpmmean[,12])/3
+cpmmean[,5]=(cpmmean[,13]+cpmmean[,14]+cpmmean[,15])/3
+cpmmean[,6]=(cpmmean[,16]+cpmmean[,17]+cpmmean[,18])/3
+cpmmean=cpmmean[,1:6]
+
+scalecpm=t(apply(cpmdata[,18:35], MARGIN = 1, FUN = scale ))
+colnames(scalecpm)=colnames(cpmdata)[18:35]
+scalemeancpm=t(apply(cpmmean, MARGIN = 1, FUN = scale ))
+colnames(scalemeancpm)=c("LV 0H","LV 3H","LV 6H","LN 0H","LN 3H","LN 6H")
+```
+
+
+```{r}
+##Identifies the genes with the greatest positive contribution to PC1
+
+pca <- prcomp(t(cpmdata[,18:35]), scale.=TRUE) 
+gr <- factor(row.names(groups))
+PCcontribute=pca$rotation[,1]
+PCcontribute=PCcontribute[order(PCcontribute,decreasing=T)]
+
+##The column sum of squares of the loadings (pca$rotation) are the variances of PCs.
+percents=(PCcontribute*PCcontribute)
+##puts the genes in decreasing order
+percents=percents[order(percents,decreasing=T)]
+
+loading=PCcontribute[names(percents)]
+##percent2=percents
+temppercent=0
+i=1
+while(i<=length(percents)){
+  percents[i]=percents[i]+temppercent
+  temppercent=percents[i]
+  i=i+1
+}
+percents=percents[loading[names(percents)]>0]
+hmd=names(percents)[percents<=.1]
+hmd=cpmdata[(hmd),18:35]
+```
+
+```{r include=F}
+sigs=row.names(hmd)
+bg=cpmdata[,1:2]
+bg[,1]=0
+bg[sigs,1]=1
+genes=bg[,1]
+names(genes)=row.names(bg)
+pwf=nullp(genes,"hg19","ensGene")
+GO.wall=goseq(pwf,"hg19","ensGene")
+GO.wall$adjp=p.adjust(GO.wall$over_represented_pvalue,method="BH")
+PC1GO=GO.wall
+
+id2name=PC1GO$term
+names(id2name)=PC1GO$category
+name2id=PC1GO$category
+names(name2id)=PC1GO$term
+
+gene2cat <- getgo(rownames(pwf), "hg19",  "ensGene")
+cat2gene <- split(rep(names(gene2cat), sapply(gene2cat, length)),
+                    unlist(gene2cat, use.names = FALSE))
+PC1gtg <- list()
+tempterm=term
+for(tempterm in GO.wall$category){
+  tmp <- pwf[cat2gene[[tempterm]],]
+  tmp <- rownames(tmp[tmp$DEgenes > 0, ])
+  PC1gtg[[tempterm]] <- tmp
+}
+
+
+
+PC1hasgo=intersect(sigs,unlist(PC1gtg))
+PC1nogo=setdiff(sigs,unlist(PC1gtg))
+```
+
+
+
+
+```{r}
+## transport
+  ## establishment of localization
+    ## establishment of RNA localization
+    ## establishment of 
+    
+##"CC" "MF" "BP"
+ont="BP"
+##a GOseq output table
+tPC1=PC1GO
+
+row.names(tPC1)=PC1GO$term
+allsiggo=PC1GO$category[PC1GO$adjp<.05]
+GOlist=tPC1["establishment of localization","category"]
+goi=row.names(hmd)
+
+##generates a table with all child terms for each significant GO term
+  temp=tPC1["establishment of localization","category"]
+  temp2=child[temp]
+  temp3=unlist(temp2)
+  temp4=as.vector(temp3)
+  temp5=as.vector(substring(names(temp3),1,10))
+  temp6=as.vector(substring(names(temp3),12,nchar(names(temp3))))
+  temp7=matrix(0,nrow=length(temp3),ncol=3)
+  temp7[,1]=temp5
+  temp7[,2]=temp6
+  temp7[,3]=temp4
+  colnames(temp7)=c("parent","relationship","child")
+  allchildren=temp7
+  tested=unique(allchildren[,1])
+  while(length(setdiff(unique(allchildren[,3]),tested))>0){
+    temp=setdiff(unique(allchildren[,3]),tested)[1]
+    temp2=child[temp]
+    temp3=unlist(temp2)
+    temp4=as.vector(temp3)
+    temp5=as.vector(substring(names(temp3),1,10))
+    temp6=as.vector(substring(names(temp3),12,nchar(names(temp3))))
+    temp7=matrix(0,nrow=length(temp3),ncol=3)
+    temp7[,1]=temp5
+    temp7[,2]=temp6
+    temp7[,3]=temp4
+    colnames(temp7)=c("parent","relationship","child")
+    tested=unique(c(tested,temp))
+    allchildren=rbind(allchildren,temp7)
+    temp=c(rep(0,nrow(allchildren)))
+    i=1
+    while(i<=length(temp)){
+      temp[i]=length(intersect(allchildren[i,],allsiggo))
+      i=i+1
+    }
+    allchildren=allchildren[temp>0,]
+  
+  }
+
+  temp=c(rep(0,nrow(allchildren)))
+  i=1
+while(i<=length(temp)){
+  temp[i]=length(intersect(allchildren[,3],allsiggo))
+  i=i+1
+}
+
+allchildren=allchildren[temp>0,]
+
+
+    
+edges=allchildren
+
+gooiedges=unique(edges[,c(1,3)])
+colnames(gooiedges)=c("from","to")
+gooiedges=na.omit(gooiedges)
+
+GOlist=PC1GO
+i=1
+while(i<=nrow(gooiedges)){
+  if(length(GOlist$term[GOlist$category==gooiedges[i,1]])>0){
+    gooiedges[i,1]=GOlist$term[GOlist$category==gooiedges[i,1]]
+  }else{
+      gooiedges[i,1]=Term(term[[as.character(gooiedges[i,1])]])
+  }
+  
+  if(length(GOlist$term[GOlist$category==gooiedges[i,2]])>0){
+    gooiedges[i,2]=GOlist$term[GOlist$category==gooiedges[i,2]]
+  }else{
+    gooiedges[i,2]=Term(term[[as.character(gooiedges[i,2])]])
+  }
+  i=i+1
+}
+
+PC1BPg1=intersect(unique(c(allchildren[,1],allchildren[,3])),PC1GO[PC1GO[,7]=="BP",1])
+PC1BPg1=intersect(unique(c(allchildren[,1],allchildren[,3])),PC1GO[PC1GO[,7]=="BP"&PC1GO[,8]<.05,1])
+PC1BPg1=as.character(unique(unlist(PC1gtg[PC1BPg1])))
+
+```
+
+
+```{r}
+## PC1BP group 2
+## gene expression
+  ## regulation of RNA splicing
+  ## translation
+  ## transcription, DNA templated
+  
+##"CC" "MF" "BP"
+ont="BP"
+##a GOseq output table
+tPC1=PC1GO
+
+row.names(tPC1)=PC1GO$term
+allsiggo=PC1GO$category[PC1GO$adjp<.05]
+GOlist=tPC1["gene expression","category"]
+goi=row.names(hmd)
+
+##generates a table with all child terms for each significant GO term
+  temp=tPC1["gene expression","category"]
+  temp2=child[temp]
+  temp3=unlist(temp2)
+  temp4=as.vector(temp3)
+  temp5=as.vector(substring(names(temp3),1,10))
+  temp6=as.vector(substring(names(temp3),12,nchar(names(temp3))))
+  temp7=matrix(0,nrow=length(temp3),ncol=3)
+  temp7[,1]=temp5
+  temp7[,2]=temp6
+  temp7[,3]=temp4
+  colnames(temp7)=c("parent","relationship","child")
+  allchildren=temp7
+  tested=unique(allchildren[,1])
+  while(length(setdiff(unique(allchildren[,3]),tested))>0){
+    temp=setdiff(unique(allchildren[,3]),tested)[1]
+    temp2=child[temp]
+    temp3=unlist(temp2)
+    temp4=as.vector(temp3)
+    temp5=as.vector(substring(names(temp3),1,10))
+    temp6=as.vector(substring(names(temp3),12,nchar(names(temp3))))
+    temp7=matrix(0,nrow=length(temp3),ncol=3)
+    temp7[,1]=temp5
+    temp7[,2]=temp6
+    temp7[,3]=temp4
+    colnames(temp7)=c("parent","relationship","child")
+    tested=unique(c(tested,temp))
+    allchildren=rbind(allchildren,temp7)
+    temp=c(rep(0,nrow(allchildren)))
+    i=1
+    while(i<=length(temp)){
+      temp[i]=length(intersect(allchildren[i,],allsiggo))
+      i=i+1
+    }
+    allchildren=allchildren[temp>0,]
+  
+  }
+
+  temp=c(rep(0,nrow(allchildren)))
+  i=1
+while(i<=length(temp)){
+  temp[i]=length(intersect(allchildren[,3],allsiggo))
+  i=i+1
+}
+
+allchildren=allchildren[temp>0,]
+
+
+    
+edges=allchildren
+
+gooiedges=unique(edges[,c(1,3)])
+colnames(gooiedges)=c("from","to")
+gooiedges=na.omit(gooiedges)
+
+GOlist=PC1GO
+i=1
+while(i<=nrow(gooiedges)){
+  if(length(GOlist$term[GOlist$category==gooiedges[i,1]])>0){
+    gooiedges[i,1]=GOlist$term[GOlist$category==gooiedges[i,1]]
+  }else{
+      gooiedges[i,1]=Term(term[[as.character(gooiedges[i,1])]])
+  }
+  
+  if(length(GOlist$term[GOlist$category==gooiedges[i,2]])>0){
+    gooiedges[i,2]=GOlist$term[GOlist$category==gooiedges[i,2]]
+  }else{
+    gooiedges[i,2]=Term(term[[as.character(gooiedges[i,2])]])
+  }
+  i=i+1
+}
+
+PC1BPg2=intersect(unique(c(allchildren[,1],allchildren[,3])),PC1GO[PC1GO[,7]=="BP",1])
+PC1BPg2=intersect(unique(c(allchildren[,1],allchildren[,3])),PC1GO[PC1GO[,7]=="BP"&PC1GO[,8]<.05,1])
+PC1BPg2=as.character(unique(unlist(PC1gtg[PC1BPg2])))
+
+```
+
+
+```{r}
+## PC1BP group 3
+  ## cellular metabolic process
+    ## RNA metabolic process
+
+##"CC" "MF" "BP"
+ont="BP"
+##a GOseq output table
+tPC1=PC1GO
+
+row.names(tPC1)=PC1GO$term
+allsiggo=PC1GO$category[PC1GO$adjp<.05]
+GOlist=tPC1["cellular metabolic process","category"]
+goi=row.names(hmd)
+
+##generates a table with all child terms for each significant GO term
+  temp=tPC1["cellular metabolic process","category"]
+  temp2=child[temp]
+  temp3=unlist(temp2)
+  temp4=as.vector(temp3)
+  temp5=as.vector(substring(names(temp3),1,10))
+  temp6=as.vector(substring(names(temp3),12,nchar(names(temp3))))
+  temp7=matrix(0,nrow=length(temp3),ncol=3)
+  temp7[,1]=temp5
+  temp7[,2]=temp6
+  temp7[,3]=temp4
+  colnames(temp7)=c("parent","relationship","child")
+  allchildren=temp7
+  tested=unique(allchildren[,1])
+  while(length(setdiff(unique(allchildren[,3]),tested))>0){
+    temp=setdiff(unique(allchildren[,3]),tested)[1]
+    temp2=child[temp]
+    temp3=unlist(temp2)
+    temp4=as.vector(temp3)
+    temp5=as.vector(substring(names(temp3),1,10))
+    temp6=as.vector(substring(names(temp3),12,nchar(names(temp3))))
+    temp7=matrix(0,nrow=length(temp3),ncol=3)
+    temp7[,1]=temp5
+    temp7[,2]=temp6
+    temp7[,3]=temp4
+    colnames(temp7)=c("parent","relationship","child")
+    tested=unique(c(tested,temp))
+    allchildren=rbind(allchildren,temp7)
+    temp=c(rep(0,nrow(allchildren)))
+    i=1
+    while(i<=length(temp)){
+      temp[i]=length(intersect(allchildren[i,],allsiggo))
+      i=i+1
+    }
+    allchildren=allchildren[temp>0,]
+  
+  }
+
+  temp=c(rep(0,nrow(allchildren)))
+  i=1
+while(i<=length(temp)){
+  temp[i]=length(intersect(allchildren[,3],allsiggo))
+  i=i+1
+}
+
+allchildren=allchildren[temp>0,]
+
+
+    
+edges=allchildren
+
+gooiedges=unique(edges[,c(1,3)])
+colnames(gooiedges)=c("from","to")
+gooiedges=na.omit(gooiedges)
+
+GOlist=PC1GO
+i=1
+while(i<=nrow(gooiedges)){
+  if(length(GOlist$term[GOlist$category==gooiedges[i,1]])>0){
+    gooiedges[i,1]=GOlist$term[GOlist$category==gooiedges[i,1]]
+  }else{
+      gooiedges[i,1]=Term(term[[as.character(gooiedges[i,1])]])
+  }
+  
+  if(length(GOlist$term[GOlist$category==gooiedges[i,2]])>0){
+    gooiedges[i,2]=GOlist$term[GOlist$category==gooiedges[i,2]]
+  }else{
+    gooiedges[i,2]=Term(term[[as.character(gooiedges[i,2])]])
+  }
+  i=i+1
+}
+
+PC1BPg3=intersect(unique(c(allchildren[,1],allchildren[,3])),PC1GO[PC1GO[,7]=="BP",1])
+PC1BPg3=intersect(unique(c(allchildren[,1],allchildren[,3])),PC1GO[PC1GO[,7]=="BP"&PC1GO[,8]<.05,1])
+PC1BPg3=as.character(unique(unlist(PC1gtg[PC1BPg3])))
+
+```
+
+```{r include=F}
+s1=PC1BPg1
+s2=PC1BPg2
+s3=PC1BPg3
+s4=row.names(hmd)
+
+hmorder=c((setdiff(s1,c(s2,s3))),
+          (intersect(s1,intersect(s2,s3))),
+          (setdiff(intersect(s3,s2),s1)),
+          (setdiff(s3,c(s1,s2))),
+          (setdiff(intersect(s3,s1),s2)))
+split=c(rep("A",length(setdiff(s1,c(s2,s3)))),
+          rep("B",length(intersect(s1,intersect(s2,s3)))),
+          rep("C",length(setdiff(intersect(s3,s2),s1))),
+          rep("D",length(setdiff(s3,c(s1,s2)))),
+          rep("E",length(setdiff(intersect(s3,s1),s2))))
+colgroups=c(rep("A",length(setdiff(s1,c(s2,s3)))),
+          rep("B",length(intersect(s1,intersect(s2,s3)))),
+          rep("C",length(setdiff(intersect(s3,s2),s1))),
+          rep("D",length(setdiff(s3,c(s1,s2)))),
+          rep("E",length(setdiff(intersect(s3,s1),s2))))
+mat1 = (scalemeancpm)[hmorder,]
+sigs=bitr(row.names(mat1),fromType = "ENSEMBL", toType = "SYMBOL",  OrgDb="org.Hs.eg.db")
+sigs1=sigs[,2]
+names(sigs1)=sigs[,1]
+row.names(mat1)=sigs1[row.names(mat1)]
+mat2 = mat1[,c(6,5,4)]
+mat1=mat1[,c(3,2,1)]
+
+orderA=hclust(dist(mat1[split=="A",]))$order
+orderB=hclust(dist(mat1[split=="B",]))$order
+orderC=hclust(dist(mat1[split=="C",]))$order
+orderD=hclust(dist(mat1[split=="D",]))$order
+orderE=hclust(dist(mat1[split=="E",]))$order
+
+order=1:length(hmorder)
+order=c((order[split=="A"])[orderA],
+        (order[split=="B"])[orderB],
+        (order[split=="C"])[orderC],
+        (order[split=="D"])[orderD],
+        (order[split=="E"])[orderE])
+
+mat1=mat1[order,]
+mat2=mat2[order,]
+hmorder=hmorder[order]
+
+sLV=unique(c(row.names(sLV2),row.names(sLV3)))
+sLN=unique(c(row.names(sLN2),row.names(sLN3)))
+
+sigLV.hm=rep(" ",length(hmorder))
+names(sigLV.hm)=hmorder
+sigLN.hm=sigLV.hm
+sigLV.hm[intersect(sLV,hmorder)]="  *"
+sigLN.hm[intersect(sLN,hmorder)]="  *"
+row.names(mat1)=paste0("    ", row.names(mat1),"    ")
+row.names(mat2)=paste0("    ", row.names(mat2),"    ")
+
+split = factor(split, levels = unique(split))
+
+A=length(split[split=="A"])
+B=length(split[split=="B"])
+C=length(split[split=="C"])
+D=length(split[split=="D"])
+E=length(split[split=="E"])
+
+tempx=c(1:A+(E+8),1:B+(E+A+10.6),1:C+(E+A+B+13.5),1:D+(E+A+B+C+15.9),(1:E)-1.5)
+temp=rep("  *",length(tempx))
+
+
+
+```
+
+```{r fig.height=6,fig.width=6, message=FALSE, warning=FALSE}
+circos.clear()
+circos.par(gap.after = c(2, 2, 2, 2, 7))
+col_fun1 = colorRamp2(c(-2, 0, 2), c("royalblue4","white","firebrick4"))
+circos.heatmap(mat1, col = col_fun1, rownames.cex=.2,track.height=.2, split = split, rownames.side = "outside",cluster=FALSE)
+
+circos.text(x=tempx,y=3.07,sigLV.hm,cex=.6)
+
+col_direction = c("A" = "forestgreen", "B" = "forestgreen","C" = "white","D" = "white","E" = "forestgreen")
+colgroups=as.vector(split)
+circos.heatmap(colgroups,col = col_direction,track.height=.025)
+col_direction = c("A" = "white", "B" = "cornflowerblue","C" = "cornflowerblue","D" = "white","E" = "white")
+circos.heatmap(colgroups,col = col_direction,track.height=.025)
+col_direction = c("A" = "white", "B" = "gold","C" = "gold","D" = "gold","E" = "gold")
+circos.heatmap(colgroups,col = col_direction,track.height=.025)
+
+legend(x=-.5,y=.4,legend=c("Protein and RNA transport \nto and from the nucleus","gene expression: Transcription, \nRNA splicing, and Translation","DNA, RNA, and Protein Biosynthesis"),fill=c("forestgreen","cornflowerblue","gold"),bty="n",title="Functional",cex=.8,y.intersp=2)
+arrows(x0=.7,y0=0.02,x1=.9,y1=0.02,length=.05)
+
+leg = Legend(title = "Norm. Expression", col_fun = col_fun1, direction = "horizontal", legend_width = unit(3, "cm"))
+draw(leg, x = unit(1, "npc"), y = unit(.95, "npc"), just = c("right", "top"))
+
+text(x=.72,y=.05,labels="0H",cex=.5)
+text(x=.80,y=.05,labels="3H",cex=.5)
+text(x=.87,y=.05,labels="6H",cex=.5)
+
+```
+
+```{r fig.height=6,fig.width=6, message=FALSE, warning=FALSE}
+circos.clear()
+circos.par(gap.after = c(2, 2, 2, 2, 7))
+col_fun1 = colorRamp2(c(-2, 0, 2), c("royalblue4","white","firebrick4"))
+circos.heatmap(mat2, col = col_fun1, rownames.cex=.2,track.height=.2, split = split, rownames.side = "outside")
+
+circos.text(x=tempx,y=3.07,sigLN.hm,cex=.6)
+
+col_direction = c("A" = "forestgreen", "B" = "forestgreen","C" = "white","D" = "white","E" = "forestgreen")
+colgroups=as.vector(split)
+circos.heatmap(colgroups,col = col_direction,track.height=.025)
+col_direction = c("A" = "white", "B" = "cornflowerblue","C" = "cornflowerblue","D" = "white","E" = "white")
+circos.heatmap(colgroups,col = col_direction,track.height=.025)
+col_direction = c("A" = "white", "B" = "gold","C" = "gold","D" = "gold","E" = "gold")
+circos.heatmap(colgroups,col = col_direction,track.height=.025)
+legend(x=-.5,y=.4,legend=c("Protein and RNA transport \nto and from the nucleus","gene expression: Transcription, \nRNA splicing, and Translation","DNA, RNA, and Protein Biosynthesis"),fill=c("forestgreen","cornflowerblue","gold"),bty="n",title="Nonfunctional",cex=.8,y.intersp=2)
+arrows(x0=.7,y0=0.02,x1=.9,y1=0.02,length=.05)
+
+text(x=.72,y=.05,labels="0H",cex=.5)
+text(x=.80,y=.05,labels="3H",cex=.5)
+text(x=.87,y=.05,labels="6H",cex=.5)
+```
+

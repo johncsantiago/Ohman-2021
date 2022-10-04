@@ -44,7 +44,7 @@ zcoords=pca$x[,1]
 xcoords=pca$x[,2]
 ycoords=pca$x[,3]
 pcacolors=c("darkgreen","red3")
-lines3D(x=xcoords[c(1,4,7)],y=ycoords[c(1,4,7)],z=zcoords[c(1,4,7)],type="l",colkey=F,col="darkgreen",xlim=c(min(xcoords),max(xcoords)),zlim=c(min(zcoords),max(zcoords)),ylim=c(min(ycoords),max(ycoords)),zlab="PC1 (28.31%)",xlab="PC2 (13.51%)",ylab="PC3 (10.04%)",lty=1,axes=T,ticktype="detailed",box=T,bty="b2", theta=40, phi=20,r=4,lwd=2)
+lines3D(x=xcoords[c(1,4,7)],y=ycoords[c(1,4,7)],z=zcoords[c(1,4,7)],type="l",colkey=F,col="darkgreen",xlim=c(min(xcoords),max(xcoords)),zlim=c(min(zcoords),max(zcoords)),ylim=c(min(ycoords),max(ycoords)),zlab=paste0("PC1 (",ve[1],"%)"),xlab=paste0("PC2 (",ve[2],"%)"),ylab=paste0("PC3 (",ve[3],"%)"),lty=1,axes=T,ticktype="detailed",box=T,bty="b2", theta=40, phi=20,r=4,lwd=2)
 
 lines3D(x=xcoords[c(2,5,8)],y=ycoords[c(2,5,8)],z=zcoords[c(2,5,8)],type="l",colkey=F,col="darkgreen",add=T,lty=2,lwd=2)
 lines3D(x=xcoords[c(3,6,9)],y=ycoords[c(3,6,9)],z=zcoords[c(3,6,9)],type="l",colkey=F,col="darkgreen",add=T,lty=3,lwd=2)
