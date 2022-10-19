@@ -5,10 +5,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-library(rgl)
 knitr::opts_chunk$set(echo = FALSE, fig.align="center")
-knitr::knit_hooks$set(webgl = hook_webgl)
-
 ```
 
 ```{r, include = FALSE}
