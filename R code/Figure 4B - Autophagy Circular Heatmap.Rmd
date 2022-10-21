@@ -14,22 +14,13 @@ knitr::knit_hooks$set(webgl = hook_webgl)
 
 ```{r include=F, message=FALSE}
 ##Load Libraries
-library(tidyverse)
 library(edgeR)
-library(ggfortify)
-library(directlabels)
-library(rgl)
-library(heatmaply)
 library(gplots)
 library(biomaRt)
 library(org.Hs.eg.db)
 library(goseq)
-library(reshape2)
 library(GO.db)
-library(GSEABase)
-library(igraph)
 library(clusterProfiler)
-library(visNetwork)
 library(circlize)
 library(ComplexHeatmap)
 ```
